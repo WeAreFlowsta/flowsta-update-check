@@ -164,3 +164,13 @@ fn versions_compare_naturally() {
     assert_eq!(compare_versions("1.8.0+build5", "1.8.0"), Equal);
     assert_eq!(compare_versions("1.8", "1.8.0"), Equal);
 }
+
+/// A real identity (Team Flowsta, which signs Flowsta's node and release
+/// manifests) decodes to a usable Ed25519 key.
+#[test]
+fn a_real_flowsta_identity_decodes_to_its_key() {
+    let key = did_key("did:flowsta:uhCAkWuA-Ehm9EVzcsPE2Wo_vpc9ImljHN8NMMEXpbtG5BdooOV9a").expect("decodes");
+    assert!(ed25519_dalek::VerifyingKey::from_bytes(&key).is_ok());
+    assert!(did_key("did:flowsta:uhCAkWuA").is_none(), "too short");
+    assert!(did_key("did:key:uhCAkWuA-Ehm9EVzcsPE2Wo_vpc9ImljHN8NMMEXpbtG5BdooOV9a").is_none(), "another method");
+}
