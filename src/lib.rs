@@ -75,6 +75,20 @@ pub struct Kit {
     pub sha256: String,
 }
 
+/// A further download the release needs beside the app itself (an optional
+/// engine, a helper program): which one, for which target, at which version,
+/// and the file's size and hash. The manifest carries no address for it: the
+/// app that knows the part knows where its files are published, so a
+/// manifest can only say WHICH file, never where to fetch one from.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Part {
+    pub name: String,
+    pub target: String,
+    pub version: String,
+    pub size: u64,
+    pub sha256: String,
+}
+
 /// A release that passed [`check`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Release {
@@ -91,11 +105,19 @@ pub struct Release {
     pub from_version: Option<String>,
     pub files: Vec<File>,
     pub kit: Vec<Kit>,
+    /// Empty for a release that names none (every release before the field
+    /// existed).
+    pub parts: Vec<Part>,
     /// The identity whose signature verified.
     pub signer: String,
 }
 
 impl Release {
+    /// The named part for this target, if the release names one.
+    pub fn part(&self, name: &str, target: &str) -> Option<&Part> {
+        self.parts.iter().find(|p| p.name == name && p.target == target)
+    }
+
     /// The file for this platform and kind, if the release has one.
     pub fn file(&self, platform: &str, kind: &str) -> Option<&File> {
         self.files.iter().find(|f| f.platform == platform && f.kind == kind)
@@ -273,6 +295,16 @@ fn is_sha256_hex(s: &str) -> bool {
     s.len() == 64 && s.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c))
 }
 
+/// Letters, digits, dots, dashes and underscores, starting with a letter or
+/// digit: nothing that could step out of a folder or an address.
+fn is_plain_word(s: &str) -> bool {
+    !s.is_empty()
+        && s.len() <= 64
+        && s.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'))
+        && s.chars().next().map(|c| c.is_ascii_alphanumeric()).unwrap_or(false)
+        && !s.contains("..")
+}
+
 fn is_version(s: &str) -> bool {
     !s.is_empty() && s.len() <= 64 && s.starts_with(|c: char| c.is_ascii_digit()) && s.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '+'))
 }
@@ -334,6 +366,22 @@ fn parse(manifest: &Value) -> Result<(Release, String, String), Refused> {
         };
         kit.push(Kit { line: line.into(), target: target.into(), sidecar: sidecar.into(), sha256: sha256.into() });
     }
+    let mut parts = Vec::new();
+    for (i, p) in body.get("parts").and_then(|p| p.as_array()).map(|p| p.as_slice()).unwrap_or(&[]).iter().enumerate() {
+        // Names, targets and versions end up in file names and addresses the
+        // app builds: plain words only.
+        let word = |key: &str| p.get(key).and_then(|v| v.as_str()).filter(|v| is_plain_word(v));
+        let (Some(name), Some(target), Some(version), Some(size), Some(sha256)) = (
+            word("name"),
+            word("target"),
+            word("version"),
+            p.get("size").and_then(|v| v.as_u64()).filter(|n| *n > 0),
+            p.get("sha256").and_then(|v| v.as_str()).filter(|h| is_sha256_hex(h)),
+        ) else {
+            return Err(shape(format!("parts[{i}]")));
+        };
+        parts.push(Part { name: name.into(), target: target.into(), version: version.into(), size, sha256: sha256.into() });
+    }
     let sig = obj.get("signature").and_then(|s| s.as_object()).ok_or_else(|| shape("signature missing".into()))?;
     let signer = sig.get("signer").and_then(|v| v.as_str()).ok_or_else(|| shape("signature.signer missing".into()))?.to_string();
     let sig_b64 = sig.get("sig").and_then(|v| v.as_str()).ok_or_else(|| shape("signature.sig missing".into()))?.to_string();
@@ -351,6 +399,7 @@ fn parse(manifest: &Value) -> Result<(Release, String, String), Refused> {
         from_version,
         files,
         kit,
+        parts,
         signer,
     };
     Ok((release, sig_b64, claimed))

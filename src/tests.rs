@@ -138,6 +138,45 @@ fn a_manifest_that_could_hash_differently_or_mislead_is_refused_for_its_shape() 
 }
 
 #[test]
+fn a_release_can_name_the_parts_it_needs() {
+    // None named: every release before the field existed.
+    assert!(checked(&signed(body(), &key(7)), "0.9.1").unwrap().parts.is_empty());
+
+    let mut m = body();
+    m["parts"] = json!([
+        { "name": "nvidia-engine", "target": "x86_64-pc-windows-msvc", "version": "b12359", "size": 790346417u64, "sha256": "d".repeat(64) },
+        { "name": "projects-helper", "target": "linux-x86_64", "version": "0.4.3", "size": 73031195u64, "sha256": "e".repeat(64) }
+    ]);
+    let r = checked(&signed(m, &key(7)), "0.9.1").unwrap();
+    assert_eq!(r.parts.len(), 2);
+    let engine = r.part("nvidia-engine", "x86_64-pc-windows-msvc").unwrap();
+    assert_eq!((engine.version.as_str(), engine.size), ("b12359", 790346417));
+    assert!(r.part("nvidia-engine", "linux-x86_64").is_none());
+    assert!(r.part("another", "linux-x86_64").is_none());
+
+    // The parts are inside what was signed: one changed afterwards is refused.
+    let mut tampered: Value = serde_json::from_slice(&signed({ let mut m = body(); m["parts"] = json!([{ "name": "a", "target": "b", "version": "1", "size": 1, "sha256": "d".repeat(64) }]); m }, &key(7))).unwrap();
+    tampered["parts"][0]["sha256"] = json!("f".repeat(64));
+    assert!(checked(&serde_json::to_vec(&tampered).unwrap(), "0.9.1").is_err());
+
+    // A part's words go into file names and addresses: plain ones only.
+    let refused = |part: Value| {
+        let mut m = body();
+        m["parts"] = json!([part]);
+        match checked(&signed(m, &key(7)), "0.9.1") {
+            Err(Refused::Shape(why)) => why,
+            other => panic!("{other:?}"),
+        }
+    };
+    let good = || json!({ "name": "nvidia-engine", "target": "linux-x86_64", "version": "b12359", "size": 5, "sha256": "d".repeat(64) });
+    for (key_name, bad) in [("version", json!("../b1")), ("version", json!("b1/x")), ("version", json!("")), ("name", json!("a b")), ("target", json!(".hidden")), ("size", json!(0)), ("sha256", json!("short"))] {
+        let mut p = good();
+        p[key_name] = bad;
+        assert!(refused(p).contains("parts[0]"), "{key_name}");
+    }
+}
+
+#[test]
 fn the_downloaded_file_must_be_the_one_named() {
     let bytes = b"the installer";
     let file = File {
