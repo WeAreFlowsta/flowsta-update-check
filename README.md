@@ -26,6 +26,9 @@ Flowsta's apps use it beside Tauri's updater: the updater's own signature proves
   "kit": [
     { "line": "holochain-0.7", "target": "x86_64-pc-windows-msvc", "sidecar": "app-holochain", "sha256": "<64 hex>" }
   ],
+  "parts": [
+    { "name": "engine", "target": "x86_64-pc-windows-msvc", "version": "b123", "size": 123, "sha256": "<64 hex>" }
+  ],
   "signature": { "signer": "did:flowsta:uhCAk...", "sig": "<base64>", "statement": "flowsta-release-manifest:v1:com.example.app:stable:12:<sha256 hex>" }
 }
 ```
@@ -35,6 +38,7 @@ Flowsta's apps use it beside Tauri's updater: the updater's own signature proves
 - **`platform`** uses the Tauri updater's names: `darwin-aarch64`, `darwin-x86_64`, `windows-x86_64`, `linux-x86_64`.
 - **`kind`** is one of `app-tarball`, `nsis`, `msi`, `deb`, `rpm` or `dmg`. An app installs only the kind it was installed as.
 - **`kit`** (optional) lists programs the release carries, by their hash after code signing.
+- **`parts`** (optional) lists further downloads the release needs beside the app itself, such as an optional engine or a helper program: a name, a target, a version, and the file's size and hash. There is no address: the app that knows a part knows where its files are published, so a manifest can say which file but never where to fetch one from. An app can fetch them before it offers the restart, so the new version starts complete. `name`, `target` and `version` are plain words (letters, digits, `.`, `-`, `_`).
 - **The signer** is a `did:flowsta:` identity: a Holochain agent key, whose 32-byte Ed25519 key is checked here.
 
 ## What `check` accepts, in order
