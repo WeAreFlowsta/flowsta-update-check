@@ -37,6 +37,7 @@ Flowsta's apps use it beside Tauri's updater: the updater's own signature proves
 - **Integers only.** Floats print differently across languages and would change the hash, so a manifest with one is refused.
 - **`platform`** uses the Tauri updater's names: `darwin-aarch64`, `darwin-x86_64`, `windows-x86_64`, `linux-x86_64`.
 - **`kind`** is one of `app-tarball`, `nsis`, `msi`, `deb`, `rpm` or `dmg`. An app installs only the kind it was installed as.
+- **`holochain`** (optional) is for an app that runs Holochain: `lines` names the Holochain versions the release runs on, and `changes_line` says the release moves people's data to another one. An app that does not run Holochain leaves the block out.
 - **`kit`** (optional) lists programs the release carries, by their hash after code signing.
 - **`parts`** (optional) lists further downloads the release needs beside the app itself, such as an optional engine or a helper program: a name, a target, a version, and the file's size and hash. There is no address: the app that knows a part knows where its files are published, so a manifest can say which file but never where to fetch one from. An app can fetch them before it offers the restart, so the new version starts complete. `name`, `target` and `version` are plain words (letters, digits, `.`, `-`, `_`).
 - **The signer** is a `did:flowsta:` identity: a Holochain agent key, whose 32-byte Ed25519 key is checked here.

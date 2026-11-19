@@ -213,3 +213,20 @@ fn a_real_flowsta_identity_decodes_to_its_key() {
     assert!(did_key("did:flowsta:uhCAkWuA").is_none(), "too short");
     assert!(did_key("did:key:uhCAkWuA-Ehm9EVzcsPE2Wo_vpc9ImljHN8NMMEXpbtG5BdooOV9a").is_none(), "another method");
 }
+
+#[test]
+fn an_app_without_holochain_leaves_the_block_out() {
+    let mut m = body();
+    m.as_object_mut().unwrap().remove("holochain");
+    m.as_object_mut().unwrap().remove("kit");
+    let release = checked(&signed(m, &key(7)), "0.9.1").expect("a manifest with no holochain block is accepted");
+    assert!(release.lines.is_empty());
+    assert!(!release.changes_line);
+
+    // A block that is there must still say something.
+    for bad in [json!({}), json!({ "lines": [] }), json!("holochain-0.7")] {
+        let mut m = body();
+        m["holochain"] = bad.clone();
+        assert!(matches!(checked(&signed(m, &key(7)), "0.9.1"), Err(Refused::Shape(_))), "{bad}");
+    }
+}
