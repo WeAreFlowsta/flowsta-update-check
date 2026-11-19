@@ -98,6 +98,8 @@ pub struct Release {
     pub version: String,
     pub issued_at: String,
     pub notes_url: String,
+    /// The Holochain lines the release runs on. Empty for an app that does
+    /// not run Holochain (its manifest has no `holochain` block).
     pub lines: Vec<String>,
     /// The release moves people's data to another Holochain line.
     pub changes_line: bool,
@@ -332,14 +334,22 @@ fn parse(manifest: &Value) -> Result<(Release, String, String), Refused> {
         None => None,
         Some(v) => Some(v.as_str().filter(|v| is_version(v)).ok_or_else(|| shape("from_version is not a version".into()))?.to_string()),
     };
-    let holochain = body.get("holochain").and_then(|h| h.as_object()).ok_or_else(|| shape("holochain missing".into()))?;
-    let lines: Vec<String> = holochain.get("lines").and_then(|l| l.as_array()).map(|l| l.iter().filter_map(|x| x.as_str().map(str::to_string)).collect()).unwrap_or_default();
-    if lines.is_empty() {
-        return Err(shape("holochain.lines missing".into()));
-    }
-    let changes_line = match holochain.get("changes_line") {
-        None => false,
-        Some(v) => v.as_bool().ok_or_else(|| shape("holochain.changes_line must be true or false".into()))?,
+    // The Holochain block belongs to apps that run Holochain. Without it
+    // the release names no line; with it, it must name at least one.
+    let (lines, changes_line) = match body.get("holochain") {
+        None => (Vec::new(), false),
+        Some(h) => {
+            let holochain = h.as_object().ok_or_else(|| shape("holochain must be an object".into()))?;
+            let lines: Vec<String> = holochain.get("lines").and_then(|l| l.as_array()).map(|l| l.iter().filter_map(|x| x.as_str().map(str::to_string)).collect()).unwrap_or_default();
+            if lines.is_empty() {
+                return Err(shape("holochain.lines missing".into()));
+            }
+            let changes_line = match holochain.get("changes_line") {
+                None => false,
+                Some(v) => v.as_bool().ok_or_else(|| shape("holochain.changes_line must be true or false".into()))?,
+            };
+            (lines, changes_line)
+        }
     };
     let rollout_percent = match body.get("rollout") {
         None => 100,
